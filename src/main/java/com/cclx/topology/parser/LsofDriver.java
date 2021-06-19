@@ -6,6 +6,7 @@ import com.cclx.topology.model.Process;
 import com.cclx.topology.model.*;
 import com.cclx.topology.repository.*;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -42,19 +43,22 @@ public class LsofDriver implements InitializingBean {
     @Resource
     private ServerPortRepository serverPortRepository;
 
+    @Value("${reploop.topology.lsof.filename}")
+    private String filename;
+    @Value("${reploop.topology.lsof.directory}")
+    private String directory;
+
     @Override
     public void afterPropertiesSet() throws Exception {
-        //Path path = Paths.get("/Users/george/Downloads/172.17.1.2.lsof");
-        //Path path = Paths.get("/Users/george/Downloads/lsof.all1");
-        //Path path = Paths.get("/Users/george/Downloads/lsof.all2");
-        //Path path = Paths.get("/Users/george/Downloads/merge.lsof");
-        // parse("lsof.all2");
-        parse("lsof.all13");
-        //parse("172.16.5.2.lsof");
+        parse(filename);
     }
 
     private void parse(String filename) throws IOException {
-        Path path = Paths.get("/Users/george/Downloads").resolve(filename);
+        parse(directory, filename);
+    }
+
+    private void parse(String directory, String filename) throws IOException {
+        Path path = Paths.get(directory).resolve(filename);
         List<String> lines = Files.readAllLines(path);
         parse(lines);
     }
@@ -92,7 +96,7 @@ public class LsofDriver implements InitializingBean {
         // #7 handle process
         CompletableFuture<Void> cfv = cfc.thenAcceptBothAsync(cfp, (unused, ps) -> handleServices(ps));
 
-        // Finally wait to complete
+        // Finally, wait to complete
         CompletableFuture.allOf(csp, cfv).join();
     }
 

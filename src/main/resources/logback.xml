@@ -7,6 +7,8 @@
         </encoder>
     </appender>
 
+    <logger name="org.hibernate.engine.internal" level="ERROR"/>
+
     <root level="debug">
         <appender-ref ref="STDOUT"/>
     </root>
