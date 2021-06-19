@@ -1,0 +1,75 @@
+= 服务拓扑
+:graphvizdot:/usr/local/bin/dot
+
+使用服务器部署服务的时候，各个服务之间的依赖关系通常是需要额外的工作来维护的。比如有一个MySQL数据库，典型的运维场景，你想知道哪些应用依赖他就比较费劲。 在一个变换频繁的团队中是需要一个统筹来管理的。
+
+== 拓扑
+
+主要利用lsof与ps命令获取主机上的监听的端口与服务进程，通过网络连接来建立此连接两端对应的服务之间的连接关系。
+
+[source,shell script]
+----
+sudo lsof -i tcp -nPR;
+sudo ps -ef;
+----
+
+基本假设是提供服务必要监听服务端口，并且建立网络连接。这是典型的分布式场景下通过网络连接起来的多机器之间的交互方式。
+
+通过ps的输出识别出具体的服务。
+
+lsof和ps的结果通过pid关联起来。
+
+== 名词
+
+Ip :: 每个网卡有一个IP地址，每个子网内是唯一的。
+Port:: 网络端口，每个机器上是唯一的，同一时间不能复用。有些端口是临时端口，可也就是只会出现一次的那种，处理的时候要注意。
+Process:: 服务进程, 通过服务主入口区分不同的进程。也就是启动命令与main函数的命名空间。
+Server:: 一台机器，有多个网卡，也就是多个IP。
+Server Port :: 一个服务的基本服务形式，一个服务上监听一个服务端口。
+Service:: 应用层面的服务
+
+.ER图
+[graphviz,relation,svg]
+----
+digraph g {
+    node[shape=box];
+    IP -> SERVER[label="1:1"];
+    SERVER -> IP[label="1:n"];
+    SERVER_PORT -> SERVER[label="1:1"];
+    SERVER_PORT -> PROCESS[label="1:1"];
+    PROCESS -> SERVER_PORT[label="1:n"];
+    PROCESS -> SERVICE[label="1:1"];
+    SERVICE -> PROCESS[label="1:n"];
+    SERVER_PORT -> PORT[label="1:1"];
+
+    {rank=min;IP;PORT;}
+    {rank=same;SERVER;SERVER_PORT;}
+}
+----
+
+通过lsof输出的网络连接IP:PORT->IP:PORT最终建立起Service之前的拓扑关系。
+
+.服务拓扑
+[graphviz,service,svg]
+----
+digraph sg {
+    node[shape=box];
+    rankdir=LR;
+    SERVICE->SERVICE2->SERVICE3->SERVICE->SERVICE4->SERVICE2;
+}
+----
+
+== Process关系
+
+Linux服务器上的每个Process都有两个id，分别是PID与PPID。同一时刻服务器上的所有PID是不重复的，但是已经消亡的进程PID后面是可以重复被利用的。
+
+== 缺点
+
+短连接场景 :: lsof运行的时机很重要，可能采集不到或者不全。
+定时任务 :: 同样也是lsof的运行时机很重要，可能采集不到或者不全。
+外部服务 :: 第三方服务识别需要提前标注。
+多进程与进程管理 :: 通过Linux系统进程管理与监控工具启动的服务，真正服务的是子进程，这个影响服务的识别。
+
+== 结论
+
+在微服务体系下，调用链是必备的。通过他也是可以画出服务拓扑关系的。也就不需要这么麻烦了。
