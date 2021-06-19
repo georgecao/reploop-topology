@@ -2,7 +2,7 @@ package com.cclx.topology.parser;
 
 import com.cclx.topology.core.Accessible;
 import com.cclx.topology.core.HostPort;
-import com.cclx.topology.model.Process;
+import com.cclx.topology.model.Proc;
 import com.cclx.topology.model.*;
 import com.cclx.topology.repository.*;
 import org.springframework.beans.factory.InitializingBean;
@@ -33,7 +33,7 @@ public class LsofDriver implements InitializingBean {
     @Resource
     private ProcessParser processParser;
     @Resource
-    private ProcessRepository processRepository;
+    private ProcRepository processRepository;
     @Resource
     private NetworkFileRepository networkFileRepository;
     @Resource
@@ -79,7 +79,7 @@ public class LsofDriver implements InitializingBean {
         CompletableFuture<List<NetworkFile>> cfr = CompletableFuture.supplyAsync(() -> saveAllRecords(records));
 
         // Then handle process
-        CompletableFuture<List<Process>> cfp = CompletableFuture.supplyAsync(() -> saveAllProcesses(processes));
+        CompletableFuture<List<Proc>> cfp = CompletableFuture.supplyAsync(() -> saveAllProcesses(processes));
 
         // #3 Save all host ip
         CompletableFuture<List<Host>> cfi = cfr.thenApplyAsync(this::saveAllHosts);
@@ -136,8 +136,8 @@ public class LsofDriver implements InitializingBean {
         return command;
     }
 
-    private void handleServices(List<Process> processes) {
-        for (Process process : processes) {
+    private void handleServices(List<Proc> processes) {
+        for (Proc process : processes) {
             String cmd = process.getCmd();
             String name = parseServiceName(process.getCommand());
             Service service = serviceRepository.findByNameAndCmd(name, cmd);
@@ -212,7 +212,7 @@ public class LsofDriver implements InitializingBean {
             Server server = host.getServer();
             ServerPort serverPort = serverPortRepository.findByServerAndPort(server, record.getLocalPort());
             if (null == serverPort) {
-                Process process = findMasterProcess(record.getHost(), record.getPid());
+                Proc process = findMasterProcess(record.getHost(), record.getPid());
                 ServerPort sp = ServerPort.builder()
                         .server(server)
                         .port(record.getLocalPort())
@@ -224,49 +224,19 @@ public class LsofDriver implements InitializingBean {
         return ports;
     }
 
-    private static class HostPid {
-        String host;
-        Integer pid;
-
-        public HostPid(String host, Integer pid) {
-            this.host = host;
-            this.pid = pid;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            HostPid hostPid = (HostPid) o;
-            return Objects.equals(host, hostPid.host) && Objects.equals(pid, hostPid.pid);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(host, pid);
-        }
-    }
-
-    private Optional<NetworkFile> findAny(List<NetworkFile> files) {
-        return files.stream()
-                .filter(nf -> null != nf.getCmd())
-                .sorted(Comparator.comparing(NetworkFile::getPid))
-                .findAny();
-    }
-
-    private void saveAllProcessCmd(List<Process> processes) {
+    private void saveAllProcessCmd(List<Proc> processes) {
         // Group by host
-        Map<String, List<Process>> processGroup = processes.stream()
-                .collect(Collectors.groupingBy(Process::getHost, Collectors.toList()));
+        Map<String, List<Proc>> processGroup = processes.stream()
+                .collect(Collectors.groupingBy(Proc::getHost, Collectors.toList()));
         processGroup.forEach((host, processesOnHost) -> {
             // All process ids, including process's parent ids
             Set<Integer> processIds = processesOnHost.stream()
-                    .map(Process::getPid)
+                    .map(Proc::getPid)
                     .collect(Collectors.toSet());
             List<NetworkFile> files = networkFileRepository.findByHostAndPidIn(host, processIds);
             Map<Integer, List<NetworkFile>> pidMap = files.stream().collect(Collectors.groupingBy(NetworkFile::getPid, Collectors.toList()));
-            List<Process> updates = new ArrayList<>();
-            for (Process process : processesOnHost) {
+            List<Proc> updates = new ArrayList<>();
+            for (Proc process : processesOnHost) {
                 Integer processId = process.getPid();
                 var list = pidMap.get(process.getPid());
                 if (null == list) {
@@ -320,15 +290,15 @@ public class LsofDriver implements InitializingBean {
         return knownHosts;
     }
 
-    private CompletableFuture<List<Process>> saveAllProcessesAsync(List<RawProcess> processes) {
+    private CompletableFuture<List<Proc>> saveAllProcessesAsync(List<RawProcess> processes) {
         return CompletableFuture.supplyAsync(() -> saveAllProcesses(processes));
     }
 
-    private List<Process> saveAllProcesses(List<RawProcess> processes) {
-        List<Process> list = new ArrayList<>(processes.size());
+    private List<Proc> saveAllProcesses(List<RawProcess> processes) {
+        List<Proc> list = new ArrayList<>(processes.size());
         Map<String, Map<Integer, Integer>> master = processParser.reduce(processes);
         for (RawProcess process : processes) {
-            Process.ProcessBuilder p = Process.builder()
+            Proc.ProcBuilder p = Proc.builder()
                     .host(process.host)
                     .command(process.command)
                     .pid(process.pid)
@@ -341,8 +311,8 @@ public class LsofDriver implements InitializingBean {
         return list;
     }
 
-    private Process findMasterProcess(String host, Integer pid) {
-        Process process = processRepository.findByHostAndPid(host, pid);
+    private Proc findMasterProcess(String host, Integer pid) {
+        Proc process = processRepository.findByHostAndPid(host, pid);
         Objects.requireNonNull(process, String.format("%s-%d", host, pid));
         Integer mid = process.getMid();
         if (pid.equals(mid)) {

@@ -26,8 +26,8 @@ public class ServerPort {
     private Server server;
     @EqualsAndHashCode.Include
     private Integer port;
-    @OneToOne
+    @ManyToOne
     @JoinColumn(name = "processId")
     @ToString.Exclude
-    private Process process;
+    private Proc process;
 }

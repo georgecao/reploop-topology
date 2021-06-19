@@ -1,4 +1,5 @@
 = 服务拓扑
+:graphvizdot:/usr/local/bin/dot
 
 使用服务器部署服务的时候，各个服务之间的依赖关系通常是需要额外的工作来维护的。比如有一个MySQL数据库，典型的运维场景，你想知道哪些应用依赖他就比较费劲。 在一个变换频繁的团队中是需要一个统筹来管理的。
 
@@ -36,6 +37,7 @@ digraph g {
     SERVER -> IP[label="1:n"];
     SERVER_PORT -> SERVER[label="1:1"];
     SERVER_PORT -> PROCESS[label="1:1"];
+    PROCESS -> SERVER_PORT[label="1:n"];
     PROCESS -> SERVICE[label="1:1"];
     SERVICE -> PROCESS[label="1:n"];
     SERVER_PORT -> PORT[label="1:1"];

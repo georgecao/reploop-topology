@@ -6,6 +6,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 
 import javax.persistence.*;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Builder
@@ -16,10 +17,10 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Table(indexes = {
-        @Index(name = "idx_process_host", columnList = "host"),
-        @Index(name = "idx_process_pid_ppid", columnList = "pid,ppid")
+        @Index(name = "idx_proc_host", columnList = "host"),
+        @Index(name = "idx_proc_pid_ppid", columnList = "pid,ppid")
 })
-public class Process {
+public class Proc {
     @Id
     @GeneratedValue
     @EqualsAndHashCode.Include
@@ -41,6 +42,9 @@ public class Process {
      * Short command
      */
     private String cmd;
+    /**
+     * This process belongs to this service
+     */
     @ManyToOne
     @JoinColumn(name = "serviceId")
     private Service service;
@@ -49,4 +53,9 @@ public class Process {
     private LocalDateTime createdAt;
     @LastModifiedDate
     private LocalDateTime updatedAt;
+    /**
+     * All server ports belong to this process.
+     */
+    @OneToMany(mappedBy = "process")
+    private List<ServerPort> serverPorts;
 }

@@ -22,7 +22,10 @@ public class Service {
     private String name;
     @EqualsAndHashCode.Include
     private String cmd;
+    /**
+     * All processes belong to this service.
+     */
     @OneToMany(mappedBy = "service", fetch = FetchType.EAGER)
     @ToString.Exclude
-    private List<Process> processes;
+    private List<Proc> processes;
 }
