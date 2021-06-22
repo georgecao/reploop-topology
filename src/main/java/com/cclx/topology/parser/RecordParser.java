@@ -1,6 +1,7 @@
 package com.cclx.topology.parser;
 
 import com.cclx.topology.core.HostPort;
+import com.cclx.topology.core.Node;
 import com.cclx.topology.core.State;
 import org.springframework.stereotype.Component;
 
@@ -14,12 +15,25 @@ import static com.cclx.topology.Constants.*;
 @Component
 public class RecordParser {
     private HostPort parseHostPort(String val) {
-        int i = val.indexOf(COLON);
-        String host = val.substring(0, i);
-        Integer port = Integer.valueOf(val.substring(i + COLON.length()));
-        return new HostPort(host, port);
+        int idx = val.lastIndexOf(COLON);
+        // Handle IPv6 Address Here
+        String host = val.substring(0, idx);
+        String port = val.substring(idx + COLON.length());
+        if (STAR.equals(port)) {
+            throw new UdpBroadcastException();
+        }
+        return new HostPort(host, Integer.valueOf(port));
     }
 
+    /**
+     * <p>
+     * rpcbind     989     1    rpc    6u  IPv4     9205      0t0  UDP *:111
+     * rapportd    410     1 george    8u  IPv4 0xbd94963bc61702f3      0t0  UDP *:*
+     * rpcbind     989     1    rpc    7u  IPv4     9207      0t0  UDP *:736
+     * rpcbind     989     1    rpc    8u  IPv4     9208      0t0  TCP *:111 (LISTEN)
+     * openresty  9489  6123    web   11u  IPv4 1023797525      0t0  UDP 172.17.1.2:34823->100.100.2.136:53
+     * </p>
+     */
     public RawRecord parse(String host, String line) {
         String[] elements = line.split(WS);
         RawRecord ins = new RawRecord();
@@ -33,7 +47,7 @@ public class RecordParser {
                 case 5 -> ins.type = elements[i];
                 case 6 -> ins.device = elements[i];
                 case 7 -> ins.sizeOrOff = elements[i];
-                case 8 -> ins.node = elements[i];
+                case 8 -> ins.node = Node.valueOf(elements[i]);
                 case 9 -> {
                     String conn = elements[i];
                     int index = conn.indexOf(SEP);
@@ -45,15 +59,25 @@ public class RecordParser {
                     } else {
                         local = parseHostPort(conn);
                     }
-                    Conn connection = new Conn();
-                    connection.local = local;
-                    connection.remote = remote;
-                    ins.conn = connection;
+                    Conn c = new Conn();
+                    c.local = local;
+                    c.remote = remote;
+                    ins.conn = c;
                 }
                 case 10 -> {
                     String val = elements[i];
                     ins.state = State.valueOf(val.substring(1, val.length() - 1));
                 }
+            }
+        }
+        // UDP connection do not have state,
+        if (ins.node == Node.UDP) {
+            if (ins.conn.remote == null) {
+                // Consider local port as listen state
+                ins.state = State.LISTEN;
+            } else {
+                // Others keep unknown state
+                ins.state = State.UNKNOWN;
             }
         }
         if (null != host) {

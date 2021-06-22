@@ -11,7 +11,9 @@ public class Conn {
 
     public Conn(Conn conn) {
         this.local = new HostPort(conn.local);
-        this.remote = new HostPort(conn.remote);
+        if (null != conn.remote) {
+            this.remote = new HostPort(conn.remote);
+        }
     }
 
 

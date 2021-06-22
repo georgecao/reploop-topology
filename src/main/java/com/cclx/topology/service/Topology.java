@@ -2,8 +2,11 @@ package com.cclx.topology.service;
 
 import com.cclx.topology.Constants;
 import com.cclx.topology.Link;
+import com.cclx.topology.config.TopologyProperties;
 import com.cclx.topology.core.HostPort;
 import com.cclx.topology.core.State;
+import com.cclx.topology.function.WellKnownPortPredicate;
+import com.cclx.topology.function.WellKnownServicePredicate;
 import com.cclx.topology.model.*;
 import com.cclx.topology.repository.HostRepository;
 import com.cclx.topology.repository.NetworkFileRepository;
@@ -20,7 +23,6 @@ import org.springframework.util.StreamUtils;
 import javax.annotation.Resource;
 import java.io.BufferedWriter;
 import java.io.IOException;
-import java.lang.Process;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -42,6 +44,13 @@ public class Topology implements InitializingBean {
     private ServerPortRepository serverPortRepository;
     @Resource
     private ServiceRepository serviceRepository;
+    private volatile AtomicLong seed;
+    @Resource
+    private WellKnownPortPredicate wpp;
+    @Resource
+    private HostRepository hostRepository;
+    @Resource
+    private WellKnownServicePredicate wsp;
 
     private String nullToEmpty(String val) {
         return null == val ? "" : val;
@@ -57,16 +66,12 @@ public class Topology implements InitializingBean {
         return ports;
     }
 
-    private volatile AtomicLong seed;
-
-    private boolean mergeUnknown = true;
-
     private Long nextVirtualServiceId() {
         if (null == seed) {
             seed = new AtomicLong(System.currentTimeMillis());
         }
         long serviceId = seed.get();
-        if (!mergeUnknown) {
+        if (!properties.getService().isMergeUnknown()) {
             serviceId = seed.incrementAndGet();
         }
         return -(serviceId);
@@ -84,7 +89,7 @@ public class Topology implements InitializingBean {
 
         Set<Link> links = new HashSet<>();
         for (NetworkFile file : all) {
-            if (file.getState() == State.LISTEN || filter(file.getLocalPort()) || filter(file.getRemotePort())) {
+            if (file.getState() == State.LISTEN || wpp.test(file.getLocalPort()) || wpp.test(file.getRemotePort())) {
                 continue;
             }
             HostPort local = new HostPort(file.getLocalHost(), file.getLocalPort());
@@ -131,7 +136,8 @@ public class Topology implements InitializingBean {
                 links.add(lb.build());
             }
         }
-        dot(links, serviceMap);
+        Optional<Path> op = dot(links, serviceMap).map(this::convert);
+        op.ifPresent(path -> log.info("Output svg {}", path));
 
         Map<String, Set<Long>> hostServices = new HashMap<>();
         serviceMap.forEach((hostPort, service) -> {
@@ -166,27 +172,14 @@ public class Topology implements InitializingBean {
     }
 
     @Resource
-    private HostRepository hostRepository;
+    private TopologyProperties properties;
 
-    public static class LineWriter {
-        BufferedWriter writer;
-
-        public LineWriter(BufferedWriter writer) {
-            this.writer = writer;
-        }
-
-        public LineWriter writeLine(String line) throws IOException {
-            writer.write(line);
-            writer.newLine();
-            return this;
-        }
-    }
-
-    private void dot(Set<Link> links, Map<HostPort, Service> serviceMap) {
+    private Optional<Path> dot(Set<Link> links, Map<HostPort, Service> serviceMap) {
         Set<Long> added = new HashSet<>();
-        Path path = Paths.get("/Users/george/Downloads/").resolve("topology.gv");
-        try (BufferedWriter sb = Files.newBufferedWriter(path, UTF_8, CREATE, WRITE, TRUNCATE_EXISTING)) {
-            LineWriter writer = new LineWriter(sb);
+        TopologyProperties.Lsof lsof = properties.getLsof();
+        Path path = Paths.get(lsof.getDirectory()).resolve("topology.gv");
+        try (BufferedWriter bw = Files.newBufferedWriter(path, UTF_8, CREATE, WRITE, TRUNCATE_EXISTING)) {
+            LineWriter writer = new LineWriter(bw);
             writer.writeLine("digraph structs {")
                     .writeLine("rankdir=LR;")
                     .writeLine("node [shape=record];");
@@ -212,23 +205,49 @@ public class Topology implements InitializingBean {
             for (Link link : links) {
                 edge(link, writer);
             }
-            sb.append("}");
-
-            // dot -Tsvg -o topology.svg topology.gv
-            String[] cmds = new String[]{
-                    "dot",
-                    "-Tsvg",
-                    "-o",
-                    path.getParent().resolve("topology.svg").toString(),
-                    path.toString()
-            };
-            Process p = Runtime.getRuntime().exec(cmds);
-            String error = StreamUtils.copyToString(p.getErrorStream(), UTF_8);
-            String output = StreamUtils.copyToString(p.getInputStream(), UTF_8);
-            System.out.println(output);
+            writer.writeLine("}");
+            return Optional.of(path);
         } catch (IOException e) {
             log.error("Cannot output dot {} ", path, e);
         }
+        return Optional.empty();
+    }
+
+    private String nameWithoutExt(Path name) {
+        String filename = name.toString();
+        int idx = filename.lastIndexOf(Constants.DOT);
+        if (idx > 0) {
+            return filename.substring(0, idx);
+        }
+        return filename;
+    }
+
+    private String nameAppendExt(String name, String ext) {
+        return name + Constants.DOT + ext;
+    }
+
+    private Path convert(Path path) {
+        // dot -Tsvg -o topology.svg topology.gv
+        TopologyProperties.Dot dot = properties.getDot();
+        String filename = nameAppendExt(nameWithoutExt(path.getFileName()), dot.getType());
+        Path outPath = path.getParent().resolve(filename);
+        String[] cmds = new String[]{
+                dot.getPath(),
+                "-T" + dot.getType(),
+                "-o",
+                outPath.toString(),
+                path.toString()
+        };
+        try {
+            Process p = Runtime.getRuntime().exec(cmds);
+            String error = StreamUtils.copyToString(p.getErrorStream(), UTF_8);
+            String output = StreamUtils.copyToString(p.getInputStream(), UTF_8);
+            log.info("Process file {}, output {}, error {}", path, output, error);
+            return outPath;
+        } catch (IOException e) {
+            log.warn("Cannot dot {}", path, e);
+        }
+        return null;
     }
 
     private void edge(Link link, LineWriter writer) throws IOException {
@@ -236,8 +255,6 @@ public class Topology implements InitializingBean {
         Service server = link.getServer();
         writer.writeLine(fullNodeId(client.getId()) + " -> " + fullNodeId(server.getId()) + ";");
     }
-
-    private boolean details = false;
 
     private Optional<String> node(Service service, Set<HostPort> ports, Set<Long> added) {
         Long serviceId = service.getId();
@@ -247,7 +264,7 @@ public class Topology implements InitializingBean {
         added.add(serviceId);
         StringBuilder label = new StringBuilder();
         label.append(service.getName()).append("@").append(service.getCmd());
-        if (details) {
+        if (properties.getDot().getDetails()) {
             for (HostPort hp : ports) {
                 label.append(" | ").append(hp.getIp()).append(":").append(hp.getPort());
             }
@@ -270,39 +287,9 @@ public class Topology implements InitializingBean {
     private boolean filter(HostPort port, Service service) {
         if (null != service) {
             String name = service.getName();
-            if (name.startsWith("[")
-                    || name.equals("sudo")
-                    || name.endsWith("xinetd")
-                    || name.contains("cocod")
-                    || name.contains("rpc.rquotad")
-                    || name.contains("rpc.mountd")
-                    || name.contains("rpcbind")
-                    || name.contains("rpc.statd")
-                    || name.contains("gse_agent")
-                    || name.contains("salt-")
-                    || name.contains("cm-agent")
-                    || name.contains("kubelet")
-                    || name.contains("aliyun-service")
-                    || name.contains("aliyun_assist_update")
-                    || name.contains("dockerd")
-                    || name.contains("AliYunDun")
-                    || name.contains("aliyun-assist")
-                    || name.contains("gunicorn")) {
-                return true;
-            }
+            return wsp.test(name, port.port);
         }
-        Integer p = port.getPort();
-        return filter(p);
-    }
-
-    private boolean filter(Integer p) {
-        return p == 22
-                || p == 873
-                || p == 10050
-                || p == 60020
-                || p == 25
-                || p == 111
-                || p == 65533;
+        return false;
     }
 
     private void outputKnownServices(Map<HostPort, Service> serviceMap, Set<HostPort> knownServicePorts) {
@@ -365,5 +352,19 @@ public class Topology implements InitializingBean {
     @Override
     public void afterPropertiesSet() throws Exception {
         analyze();
+    }
+
+    public static class LineWriter {
+        BufferedWriter writer;
+
+        public LineWriter(BufferedWriter writer) {
+            this.writer = writer;
+        }
+
+        public LineWriter writeLine(String line) throws IOException {
+            writer.write(line);
+            writer.newLine();
+            return this;
+        }
     }
 }

@@ -1,5 +1,6 @@
 package com.cclx.topology.parser;
 
+import com.cclx.topology.core.Node;
 import com.cclx.topology.core.State;
 
 public class RawRecord {
@@ -12,7 +13,7 @@ public class RawRecord {
     String type;
     String device;
     String sizeOrOff;
-    String node;
+    Node node;
     Conn conn;
     State state;
 

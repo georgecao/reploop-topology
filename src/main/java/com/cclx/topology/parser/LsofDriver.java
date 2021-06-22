@@ -1,12 +1,13 @@
 package com.cclx.topology.parser;
 
+import com.cclx.topology.config.TopologyProperties;
 import com.cclx.topology.core.Accessible;
 import com.cclx.topology.core.HostPort;
-import com.cclx.topology.model.Proc;
+import com.cclx.topology.function.SystemServicePredicate;
 import com.cclx.topology.model.*;
 import com.cclx.topology.repository.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -27,7 +28,9 @@ import static java.util.stream.Collectors.toMap;
 
 @Component
 @Order(Ordered.LOWEST_PRECEDENCE - 100)
+@Slf4j
 public class LsofDriver implements InitializingBean {
+    private static final Pattern IP_PATTERN = Pattern.compile("([0-9.]+) \\| ");
     @Resource
     private RecordParser recordParser;
     @Resource
@@ -42,19 +45,17 @@ public class LsofDriver implements InitializingBean {
     private HostRepository hostRepository;
     @Resource
     private ServerPortRepository serverPortRepository;
-
-    @Value("${reploop.topology.lsof.filename}")
-    private String filename;
-    @Value("${reploop.topology.lsof.directory}")
-    private String directory;
+    @Resource
+    private ServerRepository serverRepository;
+    @Resource
+    private SystemServicePredicate ssp;
+    @Resource
+    private TopologyProperties properties;
 
     @Override
     public void afterPropertiesSet() throws Exception {
-        parse(filename);
-    }
-
-    private void parse(String filename) throws IOException {
-        parse(directory, filename);
+        TopologyProperties.Lsof lsof = properties.getLsof();
+        parse(lsof.getDirectory(), lsof.getFilename());
     }
 
     private void parse(String directory, String filename) throws IOException {
@@ -62,8 +63,6 @@ public class LsofDriver implements InitializingBean {
         List<String> lines = Files.readAllLines(path);
         parse(lines);
     }
-
-    private static final Pattern IP_PATTERN = Pattern.compile("([0-9.]+) \\| ");
 
     private void createIfAbsent(String h) {
         createHostsIfAbsent(Collections.singleton(h), Accessible.UNKNOWN);
@@ -104,27 +103,31 @@ public class LsofDriver implements InitializingBean {
         String host = null;
         Context context = null;
         for (String line : lines) {
-            Matcher matcher = IP_PATTERN.matcher(line);
-            if (matcher.find()) {
-                // clear
-                context = Context.INIT;
-                host = matcher.group(1);
-                createIfAbsent(host);
-                continue;
-            }
-            if (line.contains(COMMAND) && line.contains(PID)) {
-                context = Context.INSTANCE;
-                continue;
-            }
-            if (line.contains(UID) && line.contains(PID)) {
-                context = Context.PROCESS;
-                continue;
-            }
-            if (context == Context.INSTANCE) {
-                records.add(recordParser.parse(host, line));
-            }
-            if (context == Context.PROCESS) {
-                processes.add(processParser.parse(host, line));
+            try {
+                Matcher matcher = IP_PATTERN.matcher(line);
+                if (matcher.find()) {
+                    // clear
+                    context = Context.INIT;
+                    host = matcher.group(1);
+                    createIfAbsent(host);
+                    continue;
+                }
+                if (line.contains(COMMAND) && line.contains(PID)) {
+                    context = Context.INSTANCE;
+                    continue;
+                }
+                if (line.contains(UID) && line.contains(PID)) {
+                    context = Context.PROCESS;
+                    continue;
+                }
+                if (context == Context.INSTANCE) {
+                    records.add(recordParser.parse(host, line));
+                }
+                if (context == Context.PROCESS) {
+                    processes.add(processParser.parse(host, line));
+                }
+            } catch (UdpBroadcastException e) {
+                log.warn("Host {} line {}", host, line, e);
             }
         }
     }
@@ -152,9 +155,6 @@ public class LsofDriver implements InitializingBean {
         }
         processRepository.saveAll(processes);
     }
-
-    @Resource
-    private ServerRepository serverRepository;
 
     private List<Host> saveAllHosts(List<NetworkFile> records) {
         Set<String> hosts = records.stream()
@@ -237,7 +237,6 @@ public class LsofDriver implements InitializingBean {
             Map<Integer, List<NetworkFile>> pidMap = files.stream().collect(Collectors.groupingBy(NetworkFile::getPid, Collectors.toList()));
             List<Proc> updates = new ArrayList<>();
             for (Proc process : processesOnHost) {
-                Integer processId = process.getPid();
                 var list = pidMap.get(process.getPid());
                 if (null == list) {
                     list = pidMap.get(process.getMid());
@@ -290,24 +289,33 @@ public class LsofDriver implements InitializingBean {
         return knownHosts;
     }
 
-    private CompletableFuture<List<Proc>> saveAllProcessesAsync(List<RawProcess> processes) {
-        return CompletableFuture.supplyAsync(() -> saveAllProcesses(processes));
+    private List<Proc> saveAllProcesses(List<RawProcess> processes, Map<Integer, Integer> pidMap) {
+        List<Proc> list = new ArrayList<>(processes.size());
+        Integer kid = processes.stream().filter(p -> ssp.test(p.command)).map(p -> p.pid).findAny().orElse(0);
+        for (RawProcess process : processes) {
+            Integer pid = process.pid;
+            // Filter system process out safely
+            Integer mid = pidMap.get(pid);
+            if (pid.equals(kid) || kid.equals(mid)) {
+                continue;
+            }
+            Proc.ProcBuilder p = Proc.builder()
+                    .host(process.host)
+                    .command(process.command)
+                    .pid(pid)
+                    .mid(mid)
+                    .user(process.user)
+                    .ppid(process.ppid);
+            list.add(processRepository.save(p.build()));
+        }
+        return list;
     }
 
     private List<Proc> saveAllProcesses(List<RawProcess> processes) {
         List<Proc> list = new ArrayList<>(processes.size());
         Map<String, Map<Integer, Integer>> master = processParser.reduce(processes);
-        for (RawProcess process : processes) {
-            Proc.ProcBuilder p = Proc.builder()
-                    .host(process.host)
-                    .command(process.command)
-                    .pid(process.pid)
-                    .user(process.user)
-                    .ppid(process.ppid);
-            Map<Integer, Integer> pidMap = master.getOrDefault(process.host, Collections.emptyMap());
-            p.mid(pidMap.get(process.pid));
-            list.add(processRepository.save(p.build()));
-        }
+        Map<String, List<RawProcess>> groups = processes.stream().collect(Collectors.groupingBy(p0 -> p0.host, Collectors.toList()));
+        groups.forEach((host, rawProcesses) -> list.addAll(saveAllProcesses(rawProcesses, master.getOrDefault(host, Collections.emptyMap()))));
         return list;
     }
 

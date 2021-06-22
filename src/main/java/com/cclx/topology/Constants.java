@@ -9,6 +9,9 @@ public interface Constants {
     String COLON = ":";
     String COMMA = ",";
     String SEMICOLON = ";";
+    String OPEN_BRACKET = "[";
+    String K_THREAD_D = "[kthreadd]";
+    String CLOSE_BRACKET = "]";
     String AFTER_HOST = " | ";
     String COMMAND = "COMMAND";
     String UID = "UID";
@@ -17,6 +20,7 @@ public interface Constants {
     String JAVA = "java";
     String PYTHON = "python";
     String HYPHEN = "-";
+    String DOT = ".";
     String PERCENT_SIGN = "%";
     String CP = "-cp";
     String CLASSPATH = "-classpath";
