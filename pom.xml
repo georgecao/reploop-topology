@@ -36,12 +36,15 @@
             <artifactId>spring-boot-configuration-processor</artifactId>
             <optional>true</optional>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
     </dependencies>
 
     <properties>
         <java.version>16</java.version>
         <lombok.version>1.18.20</lombok.version>
-        <hbc.common.version>1.0.2-SNAPSHOT</hbc.common.version>
     </properties>
     <build>
         <resources>
