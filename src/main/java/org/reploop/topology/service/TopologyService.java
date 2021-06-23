@@ -37,7 +37,7 @@ import static org.reploop.topology.core.Accessible.YES;
 @Component
 @Slf4j
 @Order
-public class Topology implements InitializingBean {
+public class TopologyService implements InitializingBean {
     @Autowired
     private NetworkFileRepository networkFileRepository;
     @Autowired
