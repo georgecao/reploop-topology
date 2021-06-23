@@ -1,8 +1,10 @@
 package org.reploop.topology.parser;
 
+import org.reploop.topology.model.Processable;
+
 import java.util.Objects;
 
-public class RawProcess {
+public class RawProcess implements Processable {
     public String host;
     public String user;
     public Integer pid;
@@ -31,5 +33,20 @@ public class RawProcess {
                 ", ppid=" + ppid +
                 ", command='" + command + '\'' +
                 '}';
+    }
+
+    @Override
+    public String getHost() {
+        return host;
+    }
+
+    @Override
+    public Integer getPid() {
+        return pid;
+    }
+
+    @Override
+    public Integer getPpid() {
+        return ppid;
     }
 }

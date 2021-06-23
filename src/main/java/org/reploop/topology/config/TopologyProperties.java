@@ -133,6 +133,15 @@ public class TopologyProperties {
 
     public static class Service {
         boolean mergeUnknown = true;
+        String output = "known_services.csv";
+
+        public String getOutput() {
+            return output;
+        }
+
+        public void setOutput(String output) {
+            this.output = output;
+        }
 
         public boolean isMergeUnknown() {
             return mergeUnknown;
@@ -145,6 +154,7 @@ public class TopologyProperties {
         @Override
         public String toString() {
             return "Service{" +
+                    "output=" + output +
                     "mergeUnknown=" + mergeUnknown +
                     '}';
         }

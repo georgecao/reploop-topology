@@ -33,6 +33,11 @@ public class LsofDriverDelegate implements InitializingBean, LsofDriver {
     }
 
     @Override
+    public List<Host> saveAllHosts(List<NetworkFile> records) {
+        return defaultLsofDriver.saveAllHosts(records);
+    }
+
+    @Override
     public void parse(List<String> lines, List<RawRecord> records, List<RawProcess> processes) {
         defaultLsofDriver.parse(lines, records, processes);
     }
@@ -40,6 +45,11 @@ public class LsofDriverDelegate implements InitializingBean, LsofDriver {
     @Override
     public void handleServices(List<Proc> processes) {
         defaultLsofDriver.handleServices(processes);
+    }
+
+    @Override
+    public List<Proc> saveAllProcesses(List<RawProcess> processes, List<NetworkFile> files) {
+        return defaultLsofDriver.saveAllProcesses(processes, files);
     }
 
     @Override
@@ -70,11 +80,6 @@ public class LsofDriverDelegate implements InitializingBean, LsofDriver {
     @Override
     public List<Proc> saveAllProcesses(List<RawProcess> processes, Map<Integer, Integer> pidMap) {
         return defaultLsofDriver.saveAllProcesses(processes, pidMap);
-    }
-
-    @Override
-    public List<Proc> saveAllProcesses(List<RawProcess> processes) {
-        return defaultLsofDriver.saveAllProcesses(processes);
     }
 
     @Override

@@ -4,10 +4,6 @@ import org.springframework.stereotype.Component;
 
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 import static org.reploop.topology.Constants.*;
 
@@ -174,38 +170,5 @@ public class ProcessParser {
             return val.substring(0, idx);
         }
         return val;
-    }
-
-    public Map<Integer, Integer> processPerHost(List<RawProcess> processes) {
-        Map<Integer, Integer> pidMap = new HashMap<>();
-        Map<Integer, RawProcess> processMap = processes.stream()
-                .collect(Collectors.toMap(p -> p.pid, p -> p));
-        for (RawProcess process : processes) {
-            RawProcess parent = parent(processMap, process);
-            Integer pid = process.pid;
-            pidMap.put(pid, parent.pid);
-        }
-        return pidMap;
-    }
-
-    private RawProcess parent(Map<Integer, RawProcess> processMap, RawProcess process) {
-        Integer ppid = process.ppid;
-        RawProcess parent;
-        if (null == ppid || 0 == ppid || 1 == ppid || null == (parent = processMap.get(ppid))) {
-            return process;
-        } else {
-            return parent(processMap, parent);
-        }
-    }
-
-    public Map<String, Map<Integer, Integer>> reduce(List<RawProcess> processes) {
-        Map<String, Map<Integer, Integer>> hostPidMap = new HashMap<>();
-        Map<String, List<RawProcess>> groups = processes.stream()
-                .collect(Collectors.groupingBy(p0 -> p0.host, Collectors.toList()));
-        for (Map.Entry<String, List<RawProcess>> entry : groups.entrySet()) {
-            Map<Integer, Integer> pidMap = processPerHost(entry.getValue());
-            hostPidMap.put(entry.getKey(), pidMap);
-        }
-        return hostPidMap;
     }
 }

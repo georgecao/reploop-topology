@@ -15,7 +15,8 @@ import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static java.util.stream.Collectors.toMap;
+import static java.util.Collections.emptyMap;
+import static java.util.stream.Collectors.*;
 import static org.reploop.topology.Constants.*;
 
 @Component("defaultLsofDriver")
@@ -44,18 +45,22 @@ public class DefaultLsofDriver implements LsofDriver {
         createHostsIfAbsent(Collections.singleton(h), Accessible.UNKNOWN);
     }
 
-    @Override
-    public void parse(List<String> lines) {
-        // Parse to entity
-        List<RawRecord> records = new ArrayList<>();
-        List<RawProcess> processes = new ArrayList<>();
-        parse(lines, records, processes);
+    public void parse(List<RawRecord> records, List<RawProcess> rawProcesses) {
+        List<NetworkFile> files = saveAllRecords(records);
+        List<Proc> processes = saveAllProcesses(rawProcesses, files);
+        List<Host> hosts = saveAllHosts(files);
+        List<Server> servers = saveAllServers(files);
+        List<ServerPort> serverPorts = saveAllServerPort(files);
+        saveAllProcessCmd(processes);
+        handleServices(processes);
+    }
 
+    public void parseAsync(List<RawRecord> records, List<RawProcess> processes) {
         // First handle connection
         CompletableFuture<List<NetworkFile>> cfr = CompletableFuture.supplyAsync(() -> saveAllRecords(records));
 
         // Then handle process
-        CompletableFuture<List<Proc>> cfp = CompletableFuture.supplyAsync(() -> saveAllProcesses(processes));
+        CompletableFuture<List<Proc>> cfp = cfr.thenApplyAsync(files -> saveAllProcesses(processes, files));
 
         // #3 Save all host ip
         CompletableFuture<List<Host>> cfi = cfr.thenApplyAsync(this::saveAllHosts);
@@ -74,6 +79,15 @@ public class DefaultLsofDriver implements LsofDriver {
 
         // Finally, wait to complete
         CompletableFuture.allOf(csp, cfv).join();
+    }
+
+    @Override
+    public void parse(List<String> lines) {
+        // Parse to entity
+        List<RawRecord> records = new ArrayList<>();
+        List<RawProcess> processes = new ArrayList<>();
+        parse(lines, records, processes);
+        parse(records, processes);
     }
 
     @Override
@@ -135,7 +149,8 @@ public class DefaultLsofDriver implements LsofDriver {
         processRepository.saveAll(processes);
     }
 
-    private List<Host> saveAllHosts(List<NetworkFile> records) {
+    @Override
+    public List<Host> saveAllHosts(List<NetworkFile> records) {
         Set<String> hosts = records.stream()
                 .flatMap(nf -> Stream.of(nf.getHost(), nf.getLocalHost()))
                 .collect(Collectors.toSet());
@@ -152,9 +167,6 @@ public class DefaultLsofDriver implements LsofDriver {
             Set<String> hosts = list.stream()
                     .flatMap(nf -> Stream.of(nf.getHost(), nf.getLocalHost()))
                     .collect(Collectors.toSet());
-            if (host.equals("3.1")) {
-                System.out.println();
-            }
             // These IPs belong to the same server
             List<Host> knownHosts = hostRepository.findByHostIn(hosts);
             Server server = knownHosts.stream()
@@ -184,21 +196,18 @@ public class DefaultLsofDriver implements LsofDriver {
      * save server port, depends server and process
      */
     @Override
-    public List<ServerPort> saveAllServerPort(List<NetworkFile> records) {
+    public List<ServerPort> saveAllServerPort(List<NetworkFile> files) {
         List<ServerPort> ports = new ArrayList<>();
         // Host map
         List<Host> hosts = hostRepository.findAll();
         Map<String, Host> hostMap = hosts.stream().collect(toMap(Host::getHost, h -> h));
         // ServerPort and process
-        for (NetworkFile record : records) {
-            if ("172.16.2.51".equals(record.getLocalHost()) && 8080 == record.getLocalPort()) {
-                System.out.println();
-            }
+        for (NetworkFile record : files) {
             Host host = hostMap.get(record.getLocalHost());
             Server server = host.getServer();
             ServerPort serverPort = serverPortRepository.findByServerAndPort(server, record.getLocalPort());
             if (null == serverPort) {
-                Proc process = findMasterProcess(record.getHost(), record.getPid());
+                Proc process = findMasterProcess(record.getHost(), record.getMid());
                 ServerPort sp = ServerPort.builder()
                         .server(server)
                         .port(record.getLocalPort())
@@ -282,10 +291,22 @@ public class DefaultLsofDriver implements LsofDriver {
         return knownHosts;
     }
 
+    public void updateAllMasterPerHost(List<NetworkFile> files, Map<Integer, Integer> pidMap) {
+        files.forEach(nf -> {
+            Integer pid = nf.getPid();
+            nf.setMid(pidMap.get(pid));
+        });
+        networkFileRepository.saveAll(files);
+    }
+
     @Override
     public List<Proc> saveAllProcesses(List<RawProcess> processes, Map<Integer, Integer> pidMap) {
         List<Proc> list = new ArrayList<>(processes.size());
-        Integer kid = processes.stream().filter(p -> ssp.test(p.command)).map(p -> p.pid).findAny().orElse(0);
+        Integer kid = processes.stream()
+                .filter(p -> ssp.test(p.command))
+                .map(p -> p.pid)
+                .findAny()
+                .orElse(0);
         for (RawProcess process : processes) {
             Integer pid = process.pid;
             // Filter system process out safely
@@ -305,12 +326,28 @@ public class DefaultLsofDriver implements LsofDriver {
         return processRepository.saveAll(list);
     }
 
+    @Resource
+    private ProcessableTree processableTree;
+
+    /**
+     * Some sub process may miss from `ps -ef` 's resust.
+     */
+    private Map<String, Map<Integer, Integer>> findMasterProcess(List<RawProcess> processes, List<NetworkFile> files) {
+        return processableTree.reduce(processes, files);
+    }
+
     @Override
-    public List<Proc> saveAllProcesses(List<RawProcess> processes) {
+    public List<Proc> saveAllProcesses(List<RawProcess> processes, List<NetworkFile> files) {
         List<Proc> list = new ArrayList<>(processes.size());
-        Map<String, Map<Integer, Integer>> master = processParser.reduce(processes);
-        Map<String, List<RawProcess>> groups = processes.stream().collect(Collectors.groupingBy(p0 -> p0.host, Collectors.toList()));
-        groups.forEach((host, rawProcesses) -> list.addAll(saveAllProcesses(rawProcesses, master.getOrDefault(host, Collections.emptyMap()))));
+
+        Map<String, Map<Integer, Integer>> master = findMasterProcess(processes, files);
+        // Save processes
+        Map<String, List<RawProcess>> groups = processes.stream().collect(groupingBy(RawProcess::getHost, toList()));
+        groups.forEach((host, processesPerHost) -> list.addAll(saveAllProcesses(processesPerHost, master.getOrDefault(host, emptyMap()))));
+
+        // Update NetworkFile's master process id
+        Map<String, List<NetworkFile>> fileGroups = files.stream().collect(groupingBy(NetworkFile::getHost, toList()));
+        fileGroups.forEach((host, filesPerHost) -> updateAllMasterPerHost(filesPerHost, master.getOrDefault(host, emptyMap())));
         return list;
     }
 

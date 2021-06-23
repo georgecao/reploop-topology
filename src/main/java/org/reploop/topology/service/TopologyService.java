@@ -11,7 +11,6 @@ import org.reploop.topology.function.WellKnownServicePredicate;
 import org.reploop.topology.model.*;
 import org.reploop.topology.repository.HostRepository;
 import org.reploop.topology.repository.NetworkFileRepository;
-import org.reploop.topology.repository.ServerPortRepository;
 import org.reploop.topology.repository.ServiceRepository;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,8 +39,6 @@ import static org.reploop.topology.core.Accessible.YES;
 public class TopologyService implements InitializingBean {
     @Autowired
     private NetworkFileRepository networkFileRepository;
-    @Autowired
-    private ServerPortRepository serverPortRepository;
     @Resource
     private ServiceRepository serviceRepository;
     private volatile AtomicLong seed;
@@ -86,17 +83,8 @@ public class TopologyService implements InitializingBean {
                 .filter(r -> r.getState() == State.LISTEN)
                 .map(r -> new HostPort(r.getLocalHost(), r.getLocalPort()))
                 .collect(Collectors.toSet());
-        HostPort sp = new HostPort("172.16.2.51", 8080);
-
-        if (servicePorts.contains(sp)) {
-            System.out.println("yes");
-        }
         // All service
         Map<HostPort, Service> serviceMap = getServices();
-
-        if (serviceMap.containsKey(sp)) {
-            System.out.println("yes");
-        }
         // known service
         outputKnownServices(serviceMap, servicePorts);
 
@@ -187,7 +175,8 @@ public class TopologyService implements InitializingBean {
     private Optional<Path> dot(Set<Link> links, Map<HostPort, Service> serviceMap) {
         Set<Long> added = new HashSet<>();
         TopologyProperties.Lsof lsof = properties.getLsof();
-        Path path = Paths.get(lsof.getDirectory()).resolve("topology.gv");
+        TopologyProperties.Dot dot = properties.getDot();
+        Path path = Paths.get(lsof.getDirectory()).resolve(dot.getOutput());
         try (BufferedWriter bw = Files.newBufferedWriter(path, UTF_8, CREATE, WRITE, TRUNCATE_EXISTING)) {
             LineWriter writer = new LineWriter(bw);
             writer.writeLine("digraph structs {")
@@ -304,7 +293,9 @@ public class TopologyService implements InitializingBean {
 
     private void outputKnownServices(Map<HostPort, Service> serviceMap, Set<HostPort> knownServicePorts) {
         String[] headers = new String[]{"服务名称", "服务命令", "服务器IP", "服务端口"};
-        try (BufferedWriter writer = Files.newBufferedWriter(Paths.get("/Users/george/Downloads/known_services.csv"), UTF_8, CREATE, TRUNCATE_EXISTING)) {
+        var sc = properties.getService();
+        var lc = properties.getLsof();
+        try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(lc.getDirectory()).resolve(sc.getOutput()), UTF_8, CREATE, TRUNCATE_EXISTING)) {
             writer.write(String.join(Constants.COMMA, headers));
             writer.newLine();
             serviceMap.forEach((hostPort, service) -> {

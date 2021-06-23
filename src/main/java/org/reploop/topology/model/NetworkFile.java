@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
         @Index(name = "idx_nf_host_ppid", columnList = "host,ppid"),
         @Index(name = "idx_nf_host_pid", columnList = "host,pid"),
 })
-public class NetworkFile {
+public class NetworkFile implements Processable {
     @Id
     @GeneratedValue
     @EqualsAndHashCode.Include
@@ -31,6 +31,7 @@ public class NetworkFile {
     String cmd;
     Integer pid;
     Integer ppid;
+    Integer mid;
     String user;
     String localHost;
     Integer localPort;
