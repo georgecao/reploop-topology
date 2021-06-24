@@ -83,11 +83,6 @@ public class LsofDriverDelegate implements InitializingBean, LsofDriver {
     }
 
     @Override
-    public Proc findMasterProcess(String host, Integer pid) {
-        return defaultLsofDriver.findMasterProcess(host, pid);
-    }
-
-    @Override
     public List<NetworkFile> saveAllRecords(List<RawRecord> records) {
         return defaultLsofDriver.saveAllRecords(records);
     }

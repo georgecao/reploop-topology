@@ -40,6 +40,8 @@ public class DefaultLsofDriver implements LsofDriver {
     private ServerRepository serverRepository;
     @Resource
     private SystemServicePredicate ssp;
+    @Resource
+    private ProcessableTree processableTree;
 
     private void createIfAbsent(String h) {
         createHostsIfAbsent(Collections.singleton(h), Accessible.UNKNOWN);
@@ -157,6 +159,9 @@ public class DefaultLsofDriver implements LsofDriver {
         return createHostsIfAbsent(hosts, Accessible.YES);
     }
 
+    /**
+     * Accessible servers
+     */
     @Override
     public List<Server> saveAllServers(List<NetworkFile> records) {
         List<Server> servers = new ArrayList<>();
@@ -198,24 +203,31 @@ public class DefaultLsofDriver implements LsofDriver {
     @Override
     public List<ServerPort> saveAllServerPort(List<NetworkFile> files) {
         List<ServerPort> ports = new ArrayList<>();
-        // Host map
+        // Host map, include all hosts
         List<Host> hosts = hostRepository.findAll();
         Map<String, Host> hostMap = hosts.stream().collect(toMap(Host::getHost, h -> h));
         // ServerPort and process
-        for (NetworkFile record : files) {
-            Host host = hostMap.get(record.getLocalHost());
-            Server server = host.getServer();
-            ServerPort serverPort = serverPortRepository.findByServerAndPort(server, record.getLocalPort());
-            if (null == serverPort) {
-                Proc process = findMasterProcess(record.getHost(), record.getMid());
-                ServerPort sp = ServerPort.builder()
-                        .server(server)
-                        .port(record.getLocalPort())
-                        .process(process)
-                        .build();
-                ports.add(serverPortRepository.save(sp));
+        Map<String, List<NetworkFile>> groups = files.stream().collect(groupingBy(NetworkFile::getHost, toList()));
+        groups.forEach((hostIp, filesPerHost) -> {
+            Set<Integer> pids = filesPerHost.stream().map(NetworkFile::getMid).collect(toSet());
+            List<Proc> masterProcesses = processRepository.findByHostAndPidIn(hostIp, pids);
+            Map<Integer, Proc> pidProcessMap = masterProcesses.stream().collect(toMap(Proc::getPid, proc -> proc));
+            for (NetworkFile record : filesPerHost) {
+                Host host = hostMap.get(record.getLocalHost());
+                Server server = host.getServer();
+                // Include service port and temporary port
+                ServerPort serverPort = serverPortRepository.findByServerAndPort(server, record.getLocalPort());
+                if (null == serverPort) {
+                    Proc process = pidProcessMap.get(record.getMid());
+                    ServerPort sp = ServerPort.builder()
+                            .server(server)
+                            .port(record.getLocalPort())
+                            .process(process)
+                            .build();
+                    ports.add(serverPortRepository.save(sp));
+                }
             }
-        }
+        });
         return ports;
     }
 
@@ -326,9 +338,6 @@ public class DefaultLsofDriver implements LsofDriver {
         return processRepository.saveAll(list);
     }
 
-    @Resource
-    private ProcessableTree processableTree;
-
     /**
      * Some sub process may miss from `ps -ef` 's resust.
      */
@@ -349,17 +358,6 @@ public class DefaultLsofDriver implements LsofDriver {
         Map<String, List<NetworkFile>> fileGroups = files.stream().collect(groupingBy(NetworkFile::getHost, toList()));
         fileGroups.forEach((host, filesPerHost) -> updateAllMasterPerHost(filesPerHost, master.getOrDefault(host, emptyMap())));
         return list;
-    }
-
-    @Override
-    public Proc findMasterProcess(String host, Integer pid) {
-        Proc process = processRepository.findByHostAndPid(host, pid);
-        Objects.requireNonNull(process, String.format("%s-%d", host, pid));
-        Integer mid = process.getMid();
-        if (pid.equals(mid)) {
-            return process;
-        }
-        return processRepository.findByHostAndPid(host, mid);
     }
 
     @Override

@@ -31,6 +31,7 @@ import java.util.stream.Collectors;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.StandardOpenOption.*;
+import static org.reploop.topology.Constants.*;
 import static org.reploop.topology.core.Accessible.YES;
 
 @Component
@@ -262,10 +263,20 @@ public class TopologyService implements InitializingBean {
         }
         added.add(serviceId);
         StringBuilder label = new StringBuilder();
-        label.append(service.getName()).append("@").append(service.getCmd());
-        if (properties.getDot().getDetails()) {
-            for (HostPort hp : ports) {
-                label.append(" | ").append(hp.getIp()).append(":").append(hp.getPort());
+        label.append(service.getName()).append(AT).append(service.getCmd());
+        var dot = properties.getDot();
+        if (dot.getDetails()) {
+            Integer limit = dot.getLimit();
+            int c = 0;
+            List<HostPort> sorted = ports.stream()
+                    .sorted(Comparator.comparing(HostPort::getIp).thenComparing(HostPort::getPort))
+                    .collect(Collectors.toList());
+            for (HostPort hp : sorted) {
+                if (c++ >= limit) {
+                    label.append(VER_SEP).append("...").append(COLON).append("...");
+                    break;
+                }
+                label.append(VER_SEP).append(hp.getIp()).append(COLON).append(hp.getPort());
             }
         }
         String node = String.format("%s [label=\"%s\"];", fullNodeId(serviceId), label);
@@ -295,7 +306,8 @@ public class TopologyService implements InitializingBean {
         String[] headers = new String[]{"服务名称", "服务命令", "服务器IP", "服务端口"};
         var sc = properties.getService();
         var lc = properties.getLsof();
-        try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(lc.getDirectory()).resolve(sc.getOutput()), UTF_8, CREATE, TRUNCATE_EXISTING)) {
+        Path path = Paths.get(lc.getDirectory()).resolve(sc.getOutput());
+        try (BufferedWriter writer = Files.newBufferedWriter(path, UTF_8, CREATE, TRUNCATE_EXISTING)) {
             writer.write(String.join(Constants.COMMA, headers));
             writer.newLine();
             serviceMap.forEach((hostPort, service) -> {
@@ -304,7 +316,7 @@ public class TopologyService implements InitializingBean {
                 }
             });
         } catch (IOException e) {
-            log.error("Cannot handle known services", e);
+            log.error("Cannot handle known services {} ", path, e);
         }
     }
 

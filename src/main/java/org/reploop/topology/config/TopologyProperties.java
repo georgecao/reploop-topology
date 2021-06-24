@@ -48,7 +48,16 @@ public class TopologyProperties {
         private String output;
         private String type = "svg";
         private Boolean details = false;
+        private Integer limit = 100;
         private Boolean mergeUnknown = true;
+
+        public Integer getLimit() {
+            return limit;
+        }
+
+        public void setLimit(Integer limit) {
+            this.limit = limit;
+        }
 
         public String getOutput() {
             return output;
@@ -95,6 +104,7 @@ public class TopologyProperties {
             return "Dot{" +
                     "path='" + path + '\'' +
                     ", output='" + output + '\'' +
+                    ", limit='" + limit + '\'' +
                     ", type='" + type + '\'' +
                     ", details=" + details +
                     ", mergeUnknown=" + mergeUnknown +

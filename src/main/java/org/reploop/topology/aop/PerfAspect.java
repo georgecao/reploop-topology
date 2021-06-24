@@ -11,14 +11,15 @@ import org.springframework.util.StopWatch;
 @Aspect
 @Slf4j
 public class PerfAspect {
-    @Around(argNames = "jp", value = "execution(* org.reploop.topology.parser.LsofDriverDelegate.*(..))")
+    @Around(argNames = "jp", value = "execution(public * org.reploop.topology.parser.LsofDriver..*(..))")
     public Object perf(ProceedingJoinPoint jp) throws Throwable {
-        StopWatch watch = new StopWatch(jp.toShortString());
+        StopWatch watch = new StopWatch(getClass().getSimpleName());
         try {
+            watch.start(jp.getSignature().getName());
             return jp.proceed();
         } finally {
             watch.stop();
-            log.info("{}", watch);
+            log.info("{}", watch.prettyPrint());
         }
     }
 }

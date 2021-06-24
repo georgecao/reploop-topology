@@ -36,8 +36,6 @@ public interface LsofDriver {
 
     List<Proc> saveAllProcesses(List<RawProcess> processes, Map<Integer, Integer> pidMap);
 
-    Proc findMasterProcess(String host, Integer pid);
-
     List<NetworkFile> saveAllRecords(List<RawRecord> records);
 
 }

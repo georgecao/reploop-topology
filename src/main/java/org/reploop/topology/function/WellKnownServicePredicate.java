@@ -26,6 +26,7 @@ public class WellKnownServicePredicate implements BiPredicate<String, Integer> {
                 || name.contains("rpcbind")
                 || name.contains("rpc.statd")
                 || name.contains("gse_agent")
+                || name.contains("CmsGoAgent")
                 || name.contains("salt-")
                 || name.contains("cm-agent")
                 || name.endsWith("sshd")

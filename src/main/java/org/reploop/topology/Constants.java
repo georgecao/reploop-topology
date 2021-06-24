@@ -8,12 +8,13 @@ public interface Constants {
     String LO = "127.0.0.1";
     String LO_V6 = "[::1]";
     String COLON = ":";
+    String AT = "@";
     String COMMA = ",";
     String SEMICOLON = ";";
     String OPEN_BRACKET = "[";
     String K_THREAD_D = "[kthreadd]";
     String CLOSE_BRACKET = "]";
-    String AFTER_HOST = " | ";
+    String VER_SEP = " | ";
     String COMMAND = "COMMAND";
     String UID = "UID";
     String PID = "PID";

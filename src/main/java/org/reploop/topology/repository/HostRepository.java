@@ -7,7 +7,7 @@ import java.util.Collection;
 import java.util.List;
 
 public interface HostRepository extends JpaRepository<Host, Long> {
-    Host findByHost(String host);
-
     List<Host> findByHostIn(Collection<String> hosts);
+
+    Host findByHost(String host);
 }
