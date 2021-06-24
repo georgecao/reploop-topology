@@ -43,8 +43,9 @@ public class DefaultLsofDriver implements LsofDriver {
     @Resource
     private ProcessableTree processableTree;
 
-    private void createIfAbsent(String h) {
-        createHostsIfAbsent(Collections.singleton(h), Accessible.UNKNOWN);
+    private Host createIfAbsent(String h) {
+        List<Host> hosts = createHostsIfAbsent(Collections.singleton(h), Accessible.UNKNOWN);
+        return hosts.iterator().next();
     }
 
     public void parse(List<RawRecord> records, List<RawProcess> rawProcesses) {
@@ -55,6 +56,59 @@ public class DefaultLsofDriver implements LsofDriver {
         List<ServerPort> serverPorts = saveAllServerPort(files);
         saveAllProcessCmd(processes);
         handleServices(processes);
+    }
+
+    private void wellKnowService(String name, String cmd, List<HostPort> servicePorts) {
+        // Create service
+        Service service = serviceRepository.findByNameAndCmd(name, cmd);
+        if (null == service) {
+            Service newService = Service.builder()
+                    .cmd(cmd)
+                    .name(name)
+                    .build();
+            service = serviceRepository.save(newService);
+        }
+        for (HostPort hostPort : servicePorts) {
+            // Create server and hosts
+            String addr = hostPort.getIp();
+            Set<String> ips = Set.of(addr.split(COMMA));
+            List<Host> hosts = createHostsIfAbsent(ips, Accessible.NO);
+            Server server = hosts.stream()
+                    .map(Host::getServer)
+                    .filter(Objects::nonNull)
+                    .findAny()
+                    .orElseGet(() -> serverRepository.save(Server.builder().name(addr).build()));
+            hosts.forEach(h -> h.setServer(server));
+            hostRepository.saveAll(hosts);
+
+            // Server port
+            ServerPort serverPort = serverPortRepository.findByServerAndPort(server, hostPort.getPort());
+            if (null == serverPort) {
+                // Any pid will do
+                int pid = pid(hosts);
+                Proc newProc = Proc.builder()
+                        .service(service)
+                        .host(ips.iterator().next())
+                        .command(name)
+                        .cmd(cmd)
+                        .pid(pid)
+                        .ppid(1)
+                        .mid(pid)
+                        .build();
+                Proc proc = processRepository.save(newProc);
+                ServerPort nsp = ServerPort.builder()
+                        .port(hostPort.getPort())
+                        .server(server)
+                        .process(proc)
+                        .build();
+                serverPort = serverPortRepository.save(nsp);
+            }
+        }
+    }
+
+    private Integer pid(List<Host> hosts) {
+        Proc proc = processRepository.findFirstByHostInOrderByPidDesc(hosts.stream().map(Host::getHost).collect(toSet()));
+        return null == proc ? 999 : proc.getPid() + 1;
     }
 
     public void parseAsync(List<RawRecord> records, List<RawProcess> processes) {

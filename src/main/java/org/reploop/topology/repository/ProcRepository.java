@@ -12,4 +12,6 @@ public interface ProcRepository extends JpaRepository<Proc, Long> {
     List<Proc> findByHostAndPidIn(String host, Collection<Integer> pids);
 
     List<Proc> findByHost(String host);
+
+    Proc findFirstByHostInOrderByPidDesc(Collection<String> hosts);
 }
