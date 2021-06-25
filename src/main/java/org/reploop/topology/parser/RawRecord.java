@@ -1,8 +1,16 @@
 package org.reploop.topology.parser;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.reploop.topology.core.Node;
 import org.reploop.topology.core.State;
 
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class RawRecord {
     String host;
     String cmd;
@@ -16,9 +24,6 @@ public class RawRecord {
     Node node;
     Conn conn;
     State state;
-
-    public RawRecord() {
-    }
 
     public RawRecord(RawRecord instance) {
         this.host = instance.host;

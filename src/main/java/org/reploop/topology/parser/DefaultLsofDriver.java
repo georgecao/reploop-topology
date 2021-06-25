@@ -107,8 +107,7 @@ public class DefaultLsofDriver implements LsofDriver {
     }
 
     private Integer pid(List<Host> hosts) {
-        Proc proc = processRepository.findFirstByHostInOrderByPidDesc(hosts.stream().map(Host::getHost).collect(toSet()));
-        return null == proc ? 999 : proc.getPid() + 1;
+        return 12;
     }
 
     public void parseAsync(List<RawRecord> records, List<RawProcess> processes) {

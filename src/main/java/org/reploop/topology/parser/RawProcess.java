@@ -1,9 +1,17 @@
 package org.reploop.topology.parser;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.reploop.topology.model.Processable;
 
 import java.util.Objects;
 
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class RawProcess implements Processable {
     public String host;
     public String user;
