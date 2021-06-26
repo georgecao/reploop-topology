@@ -67,6 +67,28 @@ public class DefaultProcessableTree implements ProcessableTree {
 
     }
 
+    private <E extends Processable> void process(List<E> entities,
+                                                 Consumer<Simple> consumer) {
+        entities.stream()
+                .map(Simple::new)
+                .forEach(consumer);
+    }
+
+    /**
+     * Some sub process may miss from `ps -ef` 's result.
+     */
+    @Override
+    public <E extends Processable, T extends Processable> Map<String, Map<Integer, Integer>> reduce(List<E> entities,
+                                                                                                    List<T> entities2) {
+        // Entities may not have all process info,
+        // So the result may not the most far parent, maybe some parent in the middle.
+        // So we merge them first to get the whole.
+        List<Simple> merge = new ArrayList<>();
+        process(entities, merge::add);
+        process(entities2, merge::add);
+        return reduce(merge);
+    }
+
     public static class Simple implements Processable {
         private String host;
         private Integer pid;
@@ -108,27 +130,5 @@ public class DefaultProcessableTree implements ProcessableTree {
         public void setPpid(Integer ppid) {
             this.ppid = ppid;
         }
-    }
-
-    private <E extends Processable> void process(List<E> entities,
-                                                 Consumer<Simple> consumer) {
-        entities.stream()
-                .map(Simple::new)
-                .forEach(consumer);
-    }
-
-    /**
-     * Some sub process may miss from `ps -ef` 's result.
-     */
-    @Override
-    public <E extends Processable, T extends Processable> Map<String, Map<Integer, Integer>> reduce(List<E> entities,
-                                                                                                    List<T> entities2) {
-        // Entities may not have all process info,
-        // So the result may not the most far parent, maybe some parent in the middle.
-        // So we merge them first to get the whole.
-        List<Simple> merge = new ArrayList<>();
-        process(entities, merge::add);
-        process(entities2, merge::add);
-        return reduce(merge);
     }
 }

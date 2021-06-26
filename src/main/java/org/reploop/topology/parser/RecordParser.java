@@ -99,9 +99,6 @@ public class RecordParser {
                     .map(in -> in.conn.local.ip)
                     .filter(s -> !(LO.equals(s) || LO_V6.equals(s)))
                     .collect(Collectors.toSet());
-            if (hosts.isEmpty()) {
-                throw new IllegalStateException(box);
-            }
             hosts.add(box);
 
             // Replace LO with IP

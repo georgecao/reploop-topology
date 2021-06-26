@@ -177,7 +177,7 @@ public class TopologyService implements InitializingBean {
         Set<Long> added = new HashSet<>();
         TopologyProperties.Lsof lsof = properties.getLsof();
         TopologyProperties.Dot dot = properties.getDot();
-        Path path = Paths.get(lsof.getDirectory()).resolve(dot.getOutput());
+        Path path = Paths.get(properties.getDirectory()).resolve(dot.getOutput());
         try (BufferedWriter bw = Files.newBufferedWriter(path, UTF_8, CREATE, WRITE, TRUNCATE_EXISTING)) {
             LineWriter writer = new LineWriter(bw);
             writer.writeLine("digraph structs {")
@@ -305,8 +305,7 @@ public class TopologyService implements InitializingBean {
     private void outputKnownServices(Map<HostPort, Service> serviceMap, Set<HostPort> knownServicePorts) {
         String[] headers = new String[]{"服务名称", "服务命令", "服务器IP", "服务端口"};
         var sc = properties.getService();
-        var lc = properties.getLsof();
-        Path path = Paths.get(lc.getDirectory()).resolve(sc.getOutput());
+        Path path = Paths.get(properties.getDirectory()).resolve(sc.getOutput());
         try (BufferedWriter writer = Files.newBufferedWriter(path, UTF_8, CREATE, TRUNCATE_EXISTING)) {
             writer.write(String.join(Constants.COMMA, headers));
             writer.newLine();

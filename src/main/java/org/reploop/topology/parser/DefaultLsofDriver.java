@@ -1,6 +1,7 @@
 package org.reploop.topology.parser;
 
 import lombok.extern.slf4j.Slf4j;
+import org.reploop.topology.aliyun.AliyunResourceLoader;
 import org.reploop.topology.core.Accessible;
 import org.reploop.topology.core.HostPort;
 import org.reploop.topology.function.SystemServicePredicate;
@@ -42,6 +43,8 @@ public class DefaultLsofDriver implements LsofDriver {
     private SystemServicePredicate ssp;
     @Resource
     private ProcessableTree processableTree;
+    @Resource
+    private AliyunResourceLoader aliyunResourceLoader;
 
     private Host createIfAbsent(String h) {
         List<Host> hosts = createHostsIfAbsent(Collections.singleton(h), Accessible.UNKNOWN);
@@ -142,6 +145,10 @@ public class DefaultLsofDriver implements LsofDriver {
         List<RawRecord> records = new ArrayList<>();
         List<RawProcess> processes = new ArrayList<>();
         parse(lines, records, processes);
+
+        // Load known resource on the aliyun cloud
+        aliyunResourceLoader.load(records, processes);
+
         parse(records, processes);
     }
 
