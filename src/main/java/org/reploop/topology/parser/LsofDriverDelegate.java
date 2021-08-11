@@ -90,7 +90,7 @@ public class LsofDriverDelegate implements InitializingBean, LsofDriver {
     @Override
     public void afterPropertiesSet() throws Exception {
         TopologyProperties.Lsof lsof = properties.getLsof();
-        parse(lsof.getDirectory(), lsof.getFilename());
+        parse(properties.getDirectory(), lsof.getFilename());
     }
 
     private void parse(String directory, String filename) throws IOException {
