@@ -175,7 +175,6 @@ public class TopologyService implements InitializingBean {
 
     private Optional<Path> dot(Set<Link> links, Map<HostPort, Service> serviceMap) {
         Set<Long> added = new HashSet<>();
-        TopologyProperties.Lsof lsof = properties.getLsof();
         TopologyProperties.Dot dot = properties.getDot();
         Path path = Paths.get(properties.getDirectory()).resolve(dot.getOutput());
         try (BufferedWriter bw = Files.newBufferedWriter(path, UTF_8, CREATE, WRITE, TRUNCATE_EXISTING)) {

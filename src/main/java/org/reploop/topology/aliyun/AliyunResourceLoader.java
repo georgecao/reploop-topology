@@ -28,6 +28,6 @@ public class AliyunResourceLoader implements Loader {
         rdsService.load(records, processes);
         mongodbService.load(records, processes);
         slbService.load(records, processes);
-        //elasticSearchService.load(records, processes);
+        elasticSearchService.load(records, processes);
     }
 }
